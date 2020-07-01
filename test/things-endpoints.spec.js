@@ -111,7 +111,7 @@ describe('Things Endpoints', function() {
       })
     })
 
-    context(`Given an XSS attack thing`, () => {
+    context.only(`Given an XSS attack thing`, () => {
       const testUser = helpers.makeUsersArray()[1]
       const {
         maliciousThing,
@@ -127,10 +127,13 @@ describe('Things Endpoints', function() {
       })
 
       it('removes XSS attack content', () => {
+        console.log(maliciousThing)
         return supertest(app)
           .get(`/api/things`)
+          .set('Authorization', helpers.makeAuthHeader(testUsers[0]))
           .expect(200)
           .expect(res => {
+            console.log(res.body)
             expect(res.body[0].title).to.eql(expectedThing.title)
             expect(res.body[0].content).to.eql(expectedThing.content)
           })
@@ -141,7 +144,7 @@ describe('Things Endpoints', function() {
   describe(`GET /api/things/:thing_id`, () => {
     context(`Given no things`, () => {
       beforeEach(() =>
-        db.into('thingful_users').insert(testUsers)
+        helpers.seedUsers(db, testUsers)
       )
 
       it(`responds with 404`, () => {
@@ -185,7 +188,6 @@ describe('Things Endpoints', function() {
       } = helpers.makeMaliciousThing(testUsers[0])
       
       beforeEach(() =>{
-        db.into('thingful_users').insert(testUsers)
         return helpers.seedMaliciousThing(
           db,
           testUsers[0],
@@ -209,7 +211,7 @@ describe('Things Endpoints', function() {
   describe(`GET /api/things/:thing_id/reviews`, () => {
     context(`Given no things`, () => {
       beforeEach(() =>
-        db.into('thingful_users').insert(testUsers)
+        helpers.seedUsers(db, testUsers)
       )
 
       it(`responds with 404`, () => {
