@@ -1,13 +1,20 @@
 const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
 
-function seedUsers (db, users) {
-  const preppedUsers = users.map(user => ({
+function seedUsers(db, users) {
+  const preppedUsers = users.map((user) => ({
     ...user,
-    password: bcrypt.hashSync(user.password, 10)
-  }))
-  return db.into('thingful_users')
+    password: bcrypt.hashSync(user.password, 1),
+  }));
+  return db
+    .into("thingful_users")
     .insert(preppedUsers)
-    .then(() => db.raw(`SELECT setval('thingful_users_id_seq', ?)`, [users[users.length - 1].id]))
+    .then(() =>
+      // update the auto sequence to stay in sync
+      db.raw(`SELECT setval('thingful_users_id_seq', ?)`, [
+        users[users.length - 1].id,
+      ])
+    );
 }
 
 function makeUsersArray() {
@@ -243,15 +250,24 @@ function cleanTables(db) {
 }
 
 function seedThingsTables(db, users, things, reviews=[]) {
+  // use a transaction to group the queries and auto rollback on any failure
   return db.transaction(async trx => {
     await seedUsers(trx, users)
     await trx.into('thingful_things').insert(things)
-    await trx.raw(`SELECT setval('thingful_things_id_seq', ?)`, [things[things.length - 1].id])
-  })
-    
-    .then(() =>
-      reviews.length && db.into('thingful_reviews').insert(reviews)
+    // update the auto sequence to match the forced id values
+    await trx.raw(
+      `SELECT setval('thingful_things_id_seq', ?)`,
+      [things[things.length - 1].id],
     )
+    // only insert reviews if there are some, also update the sequence counter
+    if (reviews.length) {
+      await trx.into('thingful_reviews').insert(reviews)
+      await trx.raw(
+        `SELECT setval('thingful_reviews_id_seq', ?)`,
+        [reviews[reviews.length - 1].id],
+      )
+    }
+  })
 }
 
 function seedMaliciousThing(db, user, thing) {
@@ -262,9 +278,12 @@ function seedMaliciousThing(db, user, thing) {
         )
 }
 
-function makeAuthHeader(user) {
-  const token = Buffer.from(`${user.user_name}:${user.password}`).toString('base64')
-  return `Basic ${token}`
+function makeAuthHeader(user, secret = process.env.JWT_SECRET) {
+  const token = jwt.sign({ user_id: user.id }, secret, {
+    subject: user.user_name,
+  algorithm: 'HS256',
+  })
+  return `Bearer ${token}`
 }
 
 module.exports = {
